@@ -1,0 +1,11 @@
+# MetroMusic 配置文件
+# 作者: ALingqing_
+
+# 音乐播放音量 (0-100)
+volume: 100
+
+# 是否随机播放歌曲 (true=随机, false=按顺序)
+random: true
+
+# 检测玩家是否在地铁矿车中的检查间隔 (单位:tick, 20tick=1秒)
+check-interval: 10

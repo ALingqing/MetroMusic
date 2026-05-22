@@ -1,0 +1,25 @@
+name: MetroMusic
+version: '${project.version}'
+main: top.chenray.MetroMusic
+api-version: '1.18'
+author: ALingqing_
+description: 乘坐 Metro 地铁时自动播放 NBS 音乐
+
+depend:
+  - Metro
+  - NoteBlockAPI
+
+commands:
+  metromusic:
+    description: MetroMusic 插件管理命令
+    aliases: [mmusic, mm]
+    usage: /<command> <reload|list>
+    permission: metromusic.admin
+
+permissions:
+  metromusic.admin:
+    description: 允许使用 MetroMusic 管理命令
+    default: op
+  metromusic.listen:
+    description: 乘坐地铁时自动播放音乐
+    default: true
