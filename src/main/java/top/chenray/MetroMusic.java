@@ -15,6 +15,7 @@ import org.bukkit.scheduler.BukkitRunnable;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -256,16 +257,50 @@ public final class MetroMusic extends JavaPlugin {
     }
 
     /**
-     * 获取歌曲显示名称（标题为空时使用文件名）
+     * 获取歌曲显示名称
+     * <p>
+     * 注意：NoteBlockAPI 的 NBSDecoder#readString 逐字节读取 UTF-8 编码，
+     * 导致中文等多字节字符显示为乱码。因此优先使用文件名（文件系统编码正确），
+     * 仅在无法获取文件名时使用标题，并尝试修复编码。
+     *
+     * @see #fixEncoding(String)
      */
     private String getSongDisplayName(Song song) {
+        // 优先使用文件名 - 文件系统 (NTFS/UTF-8) 能正确保留中文
+        String fileName = songFileNames.get(song);
+        if (fileName != null) {
+            // 去掉 .nbs 后缀
+            return fileName.endsWith(".nbs") || fileName.endsWith(".NBS")
+                    ? fileName.substring(0, fileName.length() - 4)
+                    : fileName;
+        }
+        // 回退到标题，并尝试修复 NoteBlockAPI 的编码问题
         String title = song.getTitle();
         if (title != null && !title.isEmpty() && !title.equals("?")) {
-            return title;
+            return fixEncoding(title);
         }
-        // 回退到文件名
-        String fileName = songFileNames.get(song);
-        return fileName != null ? fileName : "未知歌曲";
+        return "未知歌曲";
+    }
+
+    /**
+     * 修复 NoteBlockAPI 读取 NBS 文件时产生的 UTF-8 乱码
+     * <p>
+     * NoteBlockAPI 的 {@code readString()} 将 UTF-8 编码的每个字节单独强转为 char
+     * （等同于 ISO-8859-1 解码），导致中文等非 ASCII 字符乱码。
+     * <br>
+     * 修复方法：将乱码字符串按 ISO-8859-1 重新编码为原始字节，再以 UTF-8 解码。
+     *
+     * @param garbled NoteBlockAPI 返回的可能乱码的字符串
+     * @return 修复编码后的字符串，若修复失败则返回原字符串
+     */
+    private String fixEncoding(String garbled) {
+        if (garbled == null || garbled.isEmpty()) return garbled;
+        try {
+            byte[] rawBytes = garbled.getBytes(StandardCharsets.ISO_8859_1);
+            return new String(rawBytes, StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            return garbled;
+        }
     }
 
     /**
@@ -366,7 +401,7 @@ public final class MetroMusic extends JavaPlugin {
                     for (int i = 0; i < songList.size(); i++) {
                         Song s = songList.get(i);
                         String displayName = getSongDisplayName(s);
-                        String author = s.getAuthor();
+                        String author = fixEncoding(s.getAuthor());
                         if (author == null || author.isEmpty() || author.equals("?")) {
                             sender.sendMessage(ChatColor.YELLOW + String.valueOf(i + 1) + ". "
                                     + ChatColor.WHITE + displayName);
