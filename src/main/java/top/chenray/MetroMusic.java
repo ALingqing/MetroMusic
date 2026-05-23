@@ -403,13 +403,22 @@ public final class MetroMusic extends JavaPlugin implements TabExecutor {
 
         stopCurrentPlayer(player);
 
-        byte volume = (byte) settings.getVolume();
+        boolean doFadeIn = settings.isFadeInNext();
+        settings.setFadeInNext(false);
+
+        byte volume = doFadeIn ? 0 : (byte) settings.getVolume();
         RadioSongPlayer songPlayer = new RadioSongPlayer(songData.getSong());
         songPlayer.setVolume(volume);
         songPlayer.addPlayer(player);
 
         activePlayers.put(playerId, songPlayer);
         songPlayer.setPlaying(true);
+
+        // 渐强启动
+        if (doFadeIn) {
+            settings.setEffectiveVolume(0);
+            fadeIn(player, PlayerSettings.FADE_TICKS);
+        }
 
         songData.incrementPlayCount();
         settings.setCurrentSong(songData);
@@ -547,6 +556,112 @@ public final class MetroMusic extends JavaPlugin implements TabExecutor {
         player.sendMessage(lang.get("mode.set", modeName));
     }
 
+    // ==================== 渐强渐弱 ====================
+
+    /**
+     * 音乐渐弱 (Fade Out)
+     * @param player 目标玩家
+     * @param ticks 渐变持续 tick 数
+     * @param callback 渐弱完成后回调
+     */
+    public void fadeOut(Player player, int ticks, Runnable callback) {
+        UUID playerId = player.getUniqueId();
+        PlayerSettings settings = getPlayerSettings(playerId);
+        if (settings == null) return;
+
+        // 取消正在进行的渐变
+        settings.cancelFadeTask();
+
+        RadioSongPlayer sp = activePlayers.get(playerId);
+        if (sp == null) {
+            if (callback != null) callback.run();
+            return;
+        }
+
+        int startVolume = settings.getEffectiveVolume();
+        if (startVolume <= 0) {
+            sp.setVolume((byte) 0);
+            settings.setEffectiveVolume(0);
+            if (callback != null) callback.run();
+            return;
+        }
+
+        int taskId = new BukkitRunnable() {
+            int step = 0;
+
+            @Override
+            public void run() {
+                step++;
+                if (step >= ticks) {
+                    // 渐弱完成
+                    sp.setVolume((byte) 0);
+                    settings.setEffectiveVolume(0);
+                    if (callback != null) callback.run();
+                    settings.setFadeTaskId(-1);
+                    cancel();
+                    return;
+                }
+                int vol = (int) (startVolume * (1.0 - (double) step / ticks));
+                vol = Math.max(0, vol);
+                sp.setVolume((byte) vol);
+                settings.setEffectiveVolume(vol);
+            }
+        }.runTaskTimer(this, 0L, 1L).getTaskId();
+
+        settings.setFadeTaskId(taskId);
+    }
+
+    /**
+     * 音乐渐强 (Fade In)
+     * @param player 目标玩家
+     * @param ticks 渐变持续 tick 数
+     */
+    public void fadeIn(Player player, int ticks) {
+        UUID playerId = player.getUniqueId();
+        PlayerSettings settings = getPlayerSettings(playerId);
+        if (settings == null) return;
+
+        settings.cancelFadeTask();
+
+        RadioSongPlayer sp = activePlayers.get(playerId);
+        if (sp == null) return;
+
+        int targetVolume = settings.getVolume();
+        if (targetVolume <= 0) return;
+
+        int taskId = new BukkitRunnable() {
+            int step = 0;
+
+            @Override
+            public void run() {
+                step++;
+                if (step >= ticks) {
+                    // 渐强完成
+                    sp.setVolume((byte) targetVolume);
+                    settings.setEffectiveVolume(targetVolume);
+                    settings.setFadeTaskId(-1);
+                    cancel();
+                    return;
+                }
+                int vol = (int) (targetVolume * (double) step / ticks);
+                vol = Math.max(0, Math.min(targetVolume, vol));
+                sp.setVolume((byte) vol);
+                settings.setEffectiveVolume(vol);
+            }
+        }.runTaskTimer(this, 0L, 1L).getTaskId();
+
+        settings.setFadeTaskId(taskId);
+    }
+
+    /**
+     * 带渐弱的停止播放（用于到站场景）
+     */
+    public void stopWithFade(Player player) {
+        fadeOut(player, PlayerSettings.FADE_TICKS, () -> {
+            stopPlaying(player);
+        });
+    }
+
     public void stopPlaying(Player player) {
         UUID playerId = player.getUniqueId();
         Integer taskId = songEndTasks.remove(playerId);
@@ -616,7 +731,7 @@ public final class MetroMusic extends JavaPlugin implements TabExecutor {
             }
             bar.setVisible(true);
 
-            if (settings.isPaused()) return;
+            if (settings.isPaused()) continue;
 
             int totalTicks = settings.getSongLength();
             if (totalTicks <= 0) { bar.setProgress(0); continue; }
@@ -624,7 +739,8 @@ public final class MetroMusic extends JavaPlugin implements TabExecutor {
             RadioSongPlayer sp = activePlayers.get(entry.getKey());
             if (sp != null) {
                 int currentTick = sp.getTick();
-                double progress = Math.min(1.0, (double) currentTick / totalTicks);
+                // currentTick 可能为 -1（歌曲未就绪），确保进度值在 [0.0, 1.0] 范围内
+                double progress = Math.max(0.0, Math.min(1.0, (double) currentTick / totalTicks));
                 bar.setProgress(progress);
             }
         }
@@ -817,6 +933,10 @@ public final class MetroMusic extends JavaPlugin implements TabExecutor {
             sender.sendMessage(LanguageManager.getInstance().get("cmd.player-only"));
             return true;
         }
+        if (!player.hasPermission("metromusic.player")) {
+            player.sendMessage(ChatColor.RED + LanguageManager.getInstance().get("cmd.no-permission"));
+            return true;
+        }
         skipSong(player);
         return true;
     }
@@ -824,6 +944,10 @@ public final class MetroMusic extends JavaPlugin implements TabExecutor {
     private boolean handlePause(CommandSender sender) {
         if (!(sender instanceof Player player)) {
             sender.sendMessage(LanguageManager.getInstance().get("cmd.player-only"));
+            return true;
+        }
+        if (!player.hasPermission("metromusic.player")) {
+            player.sendMessage(ChatColor.RED + LanguageManager.getInstance().get("cmd.no-permission"));
             return true;
         }
         pauseMusic(player);
@@ -835,6 +959,10 @@ public final class MetroMusic extends JavaPlugin implements TabExecutor {
             sender.sendMessage(LanguageManager.getInstance().get("cmd.player-only"));
             return true;
         }
+        if (!player.hasPermission("metromusic.player")) {
+            player.sendMessage(ChatColor.RED + LanguageManager.getInstance().get("cmd.no-permission"));
+            return true;
+        }
         resumeMusic(player);
         return true;
     }
@@ -842,6 +970,10 @@ public final class MetroMusic extends JavaPlugin implements TabExecutor {
     private boolean handleVolume(CommandSender sender, String[] args) {
         if (!(sender instanceof Player player)) {
             sender.sendMessage(LanguageManager.getInstance().get("cmd.player-only"));
+            return true;
+        }
+        if (!player.hasPermission("metromusic.player")) {
+            player.sendMessage(ChatColor.RED + LanguageManager.getInstance().get("cmd.no-permission"));
             return true;
         }
         LanguageManager lang = LanguageManager.getInstance();
@@ -867,6 +999,10 @@ public final class MetroMusic extends JavaPlugin implements TabExecutor {
     private boolean handleNow(CommandSender sender) {
         if (!(sender instanceof Player player)) {
             sender.sendMessage(LanguageManager.getInstance().get("cmd.player-only"));
+            return true;
+        }
+        if (!player.hasPermission("metromusic.player")) {
+            player.sendMessage(ChatColor.RED + LanguageManager.getInstance().get("cmd.no-permission"));
             return true;
         }
         LanguageManager lang = LanguageManager.getInstance();
@@ -899,6 +1035,10 @@ public final class MetroMusic extends JavaPlugin implements TabExecutor {
             sender.sendMessage(LanguageManager.getInstance().get("cmd.player-only"));
             return true;
         }
+        if (!player.hasPermission("metromusic.player")) {
+            player.sendMessage(ChatColor.RED + LanguageManager.getInstance().get("cmd.no-permission"));
+            return true;
+        }
         LanguageManager lang = LanguageManager.getInstance();
         if (args.length < 2) {
             PlayerSettings settings = getOrCreateSettings(player.getUniqueId());
@@ -925,6 +1065,10 @@ public final class MetroMusic extends JavaPlugin implements TabExecutor {
     private boolean handlePlay(CommandSender sender, String[] args) {
         if (!(sender instanceof Player player)) {
             sender.sendMessage(LanguageManager.getInstance().get("cmd.player-only"));
+            return true;
+        }
+        if (!player.hasPermission("metromusic.player")) {
+            player.sendMessage(ChatColor.RED + LanguageManager.getInstance().get("cmd.no-permission"));
             return true;
         }
         LanguageManager lang = LanguageManager.getInstance();
@@ -967,6 +1111,10 @@ public final class MetroMusic extends JavaPlugin implements TabExecutor {
             sender.sendMessage(LanguageManager.getInstance().get("cmd.player-only"));
             return true;
         }
+        if (!player.hasPermission("metromusic.player")) {
+            player.sendMessage(ChatColor.RED + LanguageManager.getInstance().get("cmd.no-permission"));
+            return true;
+        }
         if (!isInMetroMinecart(player)) {
             player.sendMessage(ChatColor.RED + "你必须在乘坐地铁矿车时才能打开歌曲选择界面");
             return true;
@@ -976,6 +1124,10 @@ public final class MetroMusic extends JavaPlugin implements TabExecutor {
     }
 
     private boolean handleStats(CommandSender sender) {
+        if (sender instanceof Player player && !player.hasPermission("metromusic.player")) {
+            sender.sendMessage(ChatColor.RED + LanguageManager.getInstance().get("cmd.no-permission"));
+            return true;
+        }
         LanguageManager lang = LanguageManager.getInstance();
         int total = getTotalPlayCount();
         sender.sendMessage(lang.get("stats.title"));

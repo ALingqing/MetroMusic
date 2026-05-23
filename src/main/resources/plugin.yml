@@ -26,7 +26,6 @@ commands:
       /<command> play <歌曲名> - 播放指定歌曲
       /<command> gui - 打开歌曲选择界面
       /<command> stats - 查看播放统计
-    permission: metromusic.admin
 
 permissions:
   metromusic.admin:

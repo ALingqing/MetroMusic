@@ -29,11 +29,20 @@ public class PlayerSettings {
     private BossBar bossBar;
     private long songStartTime;     // 当前歌曲开始播放的时间戳
     private int songLength;         // 当前歌曲长度（tick）
+    private int effectiveVolume;    // 当前实际播放音量（渐变过程中会变化）
+    private int fadeTaskId;         // 渐变定时任务ID
+    private boolean fadeInNext;     // 下一首播放时是否渐强
+
+    // 渐变常量
+    public static final int FADE_TICKS = 20;        // 渐强/渐弱持续 tick 数 (1秒)
+    public static final int FADE_INTERVAL = 1;      // 渐变间隔 tick
 
     public PlayerSettings(UUID playerId) {
         this.playerId = playerId;
-        this.volume = Bukkit.getOnlinePlayers().isEmpty() ? 100
+        int defaultVol = Bukkit.getOnlinePlayers().isEmpty() ? 100
                 : MetroMusic.getInstance().getConfig().getInt("volume", 100);
+        this.volume = defaultVol;
+        this.effectiveVolume = defaultVol;
         this.paused = false;
         this.playMode = PlayMode.RANDOM;
         this.currentIndex = -1;
@@ -41,6 +50,8 @@ public class PlayerSettings {
         this.bossBar = null;
         this.songStartTime = 0;
         this.songLength = 0;
+        this.fadeTaskId = -1;
+        this.fadeInNext = false;
     }
 
     public UUID getPlayerId() { return playerId; }
@@ -48,7 +59,25 @@ public class PlayerSettings {
     public int getVolume() { return volume; }
     public void setVolume(int volume) {
         this.volume = Math.max(0, Math.min(100, volume));
+        this.effectiveVolume = this.volume;
     }
+
+    public int getEffectiveVolume() { return effectiveVolume; }
+    public void setEffectiveVolume(int effectiveVolume) {
+        this.effectiveVolume = Math.max(0, Math.min(100, effectiveVolume));
+    }
+
+    public int getFadeTaskId() { return fadeTaskId; }
+    public void setFadeTaskId(int fadeTaskId) { this.fadeTaskId = fadeTaskId; }
+    public void cancelFadeTask() {
+        if (fadeTaskId != -1) {
+            Bukkit.getScheduler().cancelTask(fadeTaskId);
+            fadeTaskId = -1;
+        }
+    }
+
+    public boolean isFadeInNext() { return fadeInNext; }
+    public void setFadeInNext(boolean fadeInNext) { this.fadeInNext = fadeInNext; }
 
     public boolean isPaused() { return paused; }
     public void setPaused(boolean paused) { this.paused = paused; }

@@ -28,7 +28,7 @@ public class MusicListener implements Listener {
     }
 
     /**
-     * 地铁列车到站 - 报站提示，终点站停止音乐
+     * 地铁列车到站 - 报站提示，音乐渐弱再渐强，终点站渐弱停止
      */
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onTrainArrival(MetroTrainArrivalEvent event) {
@@ -36,19 +36,30 @@ public class MusicListener implements Listener {
         if (passenger == null || !passenger.isOnline()) return;
 
         LanguageManager lang = LanguageManager.getInstance();
+        PlayerSettings settings = plugin.getPlayerSettings(passenger.getUniqueId());
 
         if (event.isTerminus()) {
+            // 终点站: 渐弱后停止
             plugin.playStationChime(passenger);
-            plugin.stopPlaying(passenger);
+            plugin.stopWithFade(passenger);
             passenger.sendMessage(lang.get("station.terminus", "终点站"));
         } else {
+            // 普通到站: 渐弱后渐强 (模拟地铁到站音乐减弱)
             plugin.playStationChime(passenger);
 
+            // 先渐弱，再渐强恢复
+            plugin.fadeOut(passenger, PlayerSettings.FADE_TICKS, () -> {
+                // 渐弱完成后渐强恢复
+                plugin.fadeIn(passenger, PlayerSettings.FADE_TICKS);
+            });
+
+            // 线路切换检查
             String currentLine = plugin.getCurrentLine(passenger);
-            PlayerSettings settings = plugin.getPlayerSettings(passenger.getUniqueId());
             if (settings != null && settings.getCurrentSong() != null && currentLine != null) {
                 SongData currentSong = settings.getCurrentSong();
                 if (!currentSong.isAllowedOnLine(currentLine)) {
+                    // 取消正在进行的渐变
+                    settings.cancelFadeTask();
                     plugin.stopPlaying(passenger);
                     plugin.startPlaying(passenger);
                     passenger.sendMessage(ChatColor.AQUA + "已切换到 " + currentLine + " 线路歌单");
@@ -58,7 +69,7 @@ public class MusicListener implements Listener {
     }
 
     /**
-     * 地铁列车离站 - 歌曲未结束时继续播放，已结束则自动播下一首
+     * 地铁列车离站 - 歌曲渐强启动
      */
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onTrainDeparture(MetroTrainDepartureEvent event) {
@@ -67,6 +78,11 @@ public class MusicListener implements Listener {
 
         RadioSongPlayer existing = plugin.activePlayers.get(passenger.getUniqueId());
         if (existing == null || !existing.isPlaying()) {
+            // 标记下一首渐强启动
+            PlayerSettings settings = plugin.getPlayerSettings(passenger.getUniqueId());
+            if (settings != null) {
+                settings.setFadeInNext(true);
+            }
             plugin.stopPlaying(passenger);
             plugin.startPlaying(passenger);
         }
