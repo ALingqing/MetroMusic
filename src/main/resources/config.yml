@@ -9,3 +9,24 @@ random: true
 
 # 检测玩家是否在地铁矿车中的检查间隔 (单位:tick, 20tick=1秒)
 check-interval: 10
+
+# 语言设置 (zh_cn = 中文, en_us = English)
+language: zh_cn
+
+# ==================== 报站提示音 ====================
+station-chime:
+  # 是否启用到站提示音
+  enabled: true
+  # 提示音效名称 (Bukkit Sound 枚举值)
+  sound: BLOCK_NOTE_BLOCK_PLING
+
+# ==================== 线路专属歌单 ====================
+# 取消注释并配置后，不同地铁线路将播放不同的歌曲列表
+# 歌曲名需与 songs/ 文件夹中的 .nbs 文件名一致
+#line-playlists:
+#  一号线:
+#    - 东方永夜抄 恋色マスタースパーク.nbs
+#    - 东方妖妖梦.nbs
+#  二号线:
+#    - Megalovania.nbs
+#    - Field of Hopes and Dreams.nbs

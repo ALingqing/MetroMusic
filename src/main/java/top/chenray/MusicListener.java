@@ -1,9 +1,13 @@
 package top.chenray;
 
+import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.vehicle.VehicleExitEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import com.xxmicloxx.NoteBlockAPI.songplayer.RadioSongPlayer;
@@ -11,7 +15,7 @@ import org.cubexmc.metro.event.MetroTrainArrivalEvent;
 import org.cubexmc.metro.event.MetroTrainDepartureEvent;
 
 /**
- * 监听 Metro 地铁事件和车辆事件，控制 NBS 音乐的播放
+ * 监听 Metro 地铁事件、车辆事件和 GUI 事件，控制 NBS 音乐的播放
  *
  * @author ALingqing_
  */
@@ -24,17 +28,32 @@ public class MusicListener implements Listener {
     }
 
     /**
-     * 地铁列车到站 - 停止当前歌曲，播放到站提示音或切换歌曲
-     * 如果是终点站则停止音乐
+     * 地铁列车到站 - 报站提示，终点站停止音乐
      */
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onTrainArrival(MetroTrainArrivalEvent event) {
         Player passenger = event.getPassenger();
         if (passenger == null || !passenger.isOnline()) return;
 
+        LanguageManager lang = LanguageManager.getInstance();
+
         if (event.isTerminus()) {
-            // 到达终点站，停止音乐
+            plugin.playStationChime(passenger);
             plugin.stopPlaying(passenger);
+            passenger.sendMessage(lang.get("station.terminus", "终点站"));
+        } else {
+            plugin.playStationChime(passenger);
+
+            String currentLine = plugin.getCurrentLine(passenger);
+            PlayerSettings settings = plugin.getPlayerSettings(passenger.getUniqueId());
+            if (settings != null && settings.getCurrentSong() != null && currentLine != null) {
+                SongData currentSong = settings.getCurrentSong();
+                if (!currentSong.isAllowedOnLine(currentLine)) {
+                    plugin.stopPlaying(passenger);
+                    plugin.startPlaying(passenger);
+                    passenger.sendMessage(ChatColor.AQUA + "已切换到 " + currentLine + " 线路歌单");
+                }
+            }
         }
     }
 
@@ -48,11 +67,9 @@ public class MusicListener implements Listener {
 
         RadioSongPlayer existing = plugin.activePlayers.get(passenger.getUniqueId());
         if (existing == null || !existing.isPlaying()) {
-            // 清理可能残留的旧播放器，然后播下一首
             plugin.stopPlaying(passenger);
             plugin.startPlaying(passenger);
         }
-        // 歌曲还在播放中则继续，不打断
     }
 
     /**
@@ -62,8 +79,7 @@ public class MusicListener implements Listener {
     public void onVehicleExit(VehicleExitEvent event) {
         if (!(event.getExited() instanceof Player player)) return;
 
-        // 延迟 5 tick 检查，确保玩家完全离开矿车且不会与新上车事件冲突
-        org.bukkit.Bukkit.getScheduler().runTaskLater(plugin, () -> {
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
             if (!plugin.isInMetroMinecart(player)) {
                 plugin.stopPlaying(player);
             }
@@ -77,5 +93,28 @@ public class MusicListener implements Listener {
     public void onPlayerQuit(PlayerQuitEvent event) {
         Player player = event.getPlayer();
         plugin.stopPlaying(player);
+        plugin.getGuiViewers().remove(player.getUniqueId());
+    }
+
+    /**
+     * GUI 点击事件 - 选择歌曲/翻页（乘坐铁路时不能操作箱子，但 GUI 是通过命令打开的）
+     */
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void onInventoryClick(InventoryClickEvent event) {
+        if (!(event.getWhoClicked() instanceof Player player)) return;
+        if (!plugin.getGuiViewers().contains(player.getUniqueId())) return;
+
+        event.setCancelled(true);
+        String title = event.getView().getTitle();
+        plugin.getMusicGUI().handleClick(player, event.getSlot(), event.getRawSlot(), event.getInventory(), title);
+    }
+
+    /**
+     * GUI 关闭事件
+     */
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onInventoryClose(InventoryCloseEvent event) {
+        if (!(event.getPlayer() instanceof Player player)) return;
+        plugin.getGuiViewers().remove(player.getUniqueId());
     }
 }

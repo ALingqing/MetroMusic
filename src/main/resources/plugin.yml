@@ -13,7 +13,19 @@ commands:
   metromusic:
     description: MetroMusic 插件管理命令
     aliases: [mmusic, mm]
-    usage: /<command> <reload|list>
+    usage: |
+      /<command> - 查看帮助
+      /<command> reload - 重新加载歌曲文件
+      /<command> list - 列出所有已加载的歌曲
+      /<command> skip - 跳过当前歌曲
+      /<command> pause - 暂停播放
+      /<command> resume - 继续播放
+      /<command> volume <0-100> - 设置个人音量
+      /<command> now - 查看当前歌曲信息
+      /<command> mode <random|sequential|loop> - 设置播放模式
+      /<command> play <歌曲名> - 播放指定歌曲
+      /<command> gui - 打开歌曲选择界面
+      /<command> stats - 查看播放统计
     permission: metromusic.admin
 
 permissions:
@@ -22,4 +34,7 @@ permissions:
     default: op
   metromusic.listen:
     description: 乘坐地铁时自动播放音乐
+    default: true
+  metromusic.player:
+    description: 允许使用玩家命令 (skip/pause/resume/volume/now/mode/play/gui/stats)
     default: true
