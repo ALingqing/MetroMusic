@@ -115,12 +115,13 @@ public final class MetroMusic extends JavaPlugin implements TabExecutor {
                 }
 
                 // 启动定时检查任务
+                int interval = Math.max(5, getConfig().getInt("check-interval", 10));
                 new BukkitRunnable() {
                     @Override
                     public void run() {
                         checkPlayersInMetro();
                     }
-                }.runTaskTimer(this, 20L, 20L);
+                }.runTaskTimer(this, interval, interval);
 
                 // 启动 BossBar 更新任务
                 new BukkitRunnable() {
@@ -211,7 +212,14 @@ public final class MetroMusic extends JavaPlugin implements TabExecutor {
                         java.util.jar.JarEntry entry = entries.nextElement();
                         String name = entry.getName();
                         if (name.startsWith("songs/") && !entry.isDirectory() && name.endsWith(".nbs")) {
-                            File outFile = new File(songFolder, name.substring("songs/".length()));
+                            // 支持子文件夹: songs/分类/歌曲名.nbs
+                            String relativePath = name.substring("songs/".length());
+                            File outFile = new File(songFolder, relativePath);
+                            // 确保父目录存在（处理子文件夹）
+                            File parentDir = outFile.getParentFile();
+                            if (parentDir != null && !parentDir.exists()) {
+                                parentDir.mkdirs();
+                            }
                             if (!outFile.exists()) {
                                 try (InputStream in = getClass().getClassLoader().getResourceAsStream(name);
                                      FileOutputStream out = new FileOutputStream(outFile)) {
@@ -243,17 +251,20 @@ public final class MetroMusic extends JavaPlugin implements TabExecutor {
             return;
         }
 
-        File[] files = songFolder.listFiles((dir, name) -> name.toLowerCase().endsWith(".nbs"));
-        if (files == null || files.length == 0) {
+        // 递归收集所有 .nbs 文件（支持子文件夹分类）
+        List<File> nbsFiles = collectNbsFiles(songFolder);
+        if (nbsFiles.isEmpty()) {
             getLogger().warning("未找到任何 .nbs 歌曲文件，请将歌曲放入 plugins/MetroMusic/songs/ 文件夹");
             return;
         }
 
         List<SongData> parsed = Collections.synchronizedList(new ArrayList<>());
-        Arrays.stream(files).parallel().forEach(file -> {
+        nbsFiles.parallelStream().forEach(file -> {
             Song song = NBSDecoder.parse(file);
             if (song != null) {
-                SongData sd = new SongData(song, file.getName());
+                // 使用相对于 songs 文件夹的路径作为文件名标识，方便区分不同子文件夹中的同名文件
+                String relativePath = getRelativePath(songFolder, file);
+                SongData sd = new SongData(song, relativePath);
                 String fixedTitle = fixEncoding(song.getTitle());
                 if (fixedTitle != null && !fixedTitle.isEmpty() && !fixedTitle.equals("?")) {
                     sd.setDisplayName(fixedTitle);
@@ -265,6 +276,35 @@ public final class MetroMusic extends JavaPlugin implements TabExecutor {
         });
 
         songDataList.addAll(parsed);
+    }
+
+    /**
+     * 递归收集 songs 文件夹下所有 .nbs 文件
+     */
+    private List<File> collectNbsFiles(File dir) {
+        List<File> result = new ArrayList<>();
+        File[] files = dir.listFiles();
+        if (files == null) return result;
+        for (File file : files) {
+            if (file.isDirectory()) {
+                result.addAll(collectNbsFiles(file));
+            } else if (file.getName().toLowerCase().endsWith(".nbs")) {
+                result.add(file);
+            }
+        }
+        return result;
+    }
+
+    /**
+     * 获取文件相对于基目录的路径（使用 / 分隔符）
+     */
+    private String getRelativePath(File base, File file) {
+        String basePath = base.getAbsolutePath().replace('\\', '/');
+        String filePath = file.getAbsolutePath().replace('\\', '/');
+        if (filePath.startsWith(basePath)) {
+            return filePath.substring(basePath.length() + 1);
+        }
+        return file.getName();
     }
 
     public List<SongData> getPlayableSongs(String lineName) {
@@ -314,10 +354,10 @@ public final class MetroMusic extends JavaPlugin implements TabExecutor {
                     }
                 }
             } else {
-                // 玩家不在矿车中
-                PlayerSettings settings = playerSettings.get(playerId);
-                if (settings != null && settings.getCurrentSong() != null && !settings.isPaused()) {
-                    if (!guiViewers.contains(playerId)) {
+                // 玩家不在矿车中 - 只要有活跃的播放器就立即停止
+                if (!guiViewers.contains(playerId)) {
+                    // 检查是否有活跃的播放器残留
+                    if (activePlayers.containsKey(playerId) || activeCartPlayers.containsKey(playerId)) {
                         stopPlaying(player);
                     }
                 }

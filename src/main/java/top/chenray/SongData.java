@@ -20,9 +20,16 @@ public class SongData {
     public SongData(Song song, String fileName) {
         this.song = song;
         this.fileName = fileName;
-        this.displayName = fileName.endsWith(".nbs") || fileName.endsWith(".NBS")
-                ? fileName.substring(0, fileName.length() - 4)
+        // displayName 仅取文件名（去掉子文件夹路径和 .nbs 后缀）
+        String nameOnly = fileName.contains("/") || fileName.contains("\\")
+                ? fileName.substring(fileName.lastIndexOf('/') + 1)
                 : fileName;
+        nameOnly = nameOnly.contains("\\")
+                ? nameOnly.substring(nameOnly.lastIndexOf('\\') + 1)
+                : nameOnly;
+        this.displayName = nameOnly.endsWith(".nbs") || nameOnly.endsWith(".NBS")
+                ? nameOnly.substring(0, nameOnly.length() - 4)
+                : nameOnly;
         this.playCount = 0;
         this.disabled = false;
         this.lines = new HashSet<>();

@@ -49,15 +49,33 @@
 
 ### 内置歌曲
 
-插件内置了 **50+** 首 NBS 歌曲，首次启动时自动解压到 `plugins/MetroMusic/songs/` 目录，包括：
+插件内置了 **45+** 首 NBS 歌曲，按分类存放在 `plugins/MetroMusic/songs/` 子文件夹中：
 
-- Undertale / Deltarune 系列 - Megalovania, Field of Hopes and Dreams, Rude Buster, Death by Glamour, Spear of Justice 等 20+ 首
-- 东方 Project 系列 - 东方永夜抄、东方妖妖梦、东方红魔乡、东方风神录等 10+ 首
-- 其他经典 - Tetris A, Dead Cell - Clock Town, 起风了, 晴天等
+```
+songs/
+├── undertale/        Undertale / Deltarune 系列 (32首)
+│   ├── Megalovania.nbs
+│   ├── Field of Hopes and Dreams.nbs
+│   ├── Rude Buster.nbs
+│   ├── Spear of Justice.nbs
+│   └── ...
+├── touhou/           东方 Project 系列 (8首)
+│   ├── 东方永夜抄.nbs
+│   ├── 东方妖妖梦.nbs
+│   ├── 东方红魔乡.nbs
+│   ├── 东方风神录.nbs
+│   └── ...
+└── other/            其他经典 (5首)
+    ├── Tetris A.nbs
+    ├── Dead Cell - Clock Town.nbs
+    ├── 起风了.nbs
+    ├── 晴天.nbs
+    └── 不死鸟.nbs
+```
 
 ### 自定义歌曲
 
-1. 将 `.nbs` 格式的歌曲文件放入 `plugins/MetroMusic/songs/` 文件夹
+1. 将 `.nbs` 格式的歌曲文件放入 `plugins/MetroMusic/songs/` 文件夹（可创建子文件夹分类管理，如 `songs/mysongs/`）
 2. 执行 `/metromusic reload` 热重载
 3. 或重启服务器
 
@@ -202,7 +220,10 @@ MetroMusic/
       resources/
         config.yml                  # 配置文件
         plugin.yml                  # Bukkit 插件描述
-        songs/                      # 内置 NBS 歌曲资源
+        songs/                      # 内置 NBS 歌曲资源 (按分类子文件夹整理)
+          undertale/                # Undertale / Deltarune 系列 (32首)
+          touhou/                   # 东方 Project 系列 (8首)
+          other/                    # 其他经典 (5首)
 ```
 
 ## 更新日志

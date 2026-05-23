@@ -89,12 +89,14 @@ public class MusicListener implements Listener {
     }
 
     /**
-     * 玩家离开矿车 - 延迟停止音乐，避免换乘时误停
+     * 玩家离开矿车 - 停止音乐（ignoreCancelled=false 防止 Metro 取消事件后漏处理）
+     * 延迟 5 tick 检查，避免换乘时误停
      */
-    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = false)
     public void onVehicleExit(VehicleExitEvent event) {
         if (!(event.getExited() instanceof Player player)) return;
 
+        // 立即标记为需停止，防止定时检查滞后
         Bukkit.getScheduler().runTaskLater(plugin, () -> {
             if (!plugin.isInMetroMinecart(player)) {
                 plugin.stopPlaying(player);
